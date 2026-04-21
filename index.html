@@ -426,6 +426,74 @@
             text-decoration: none;
         }
 
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab:hover { color: var(--text); }
+
+        .tab.active {
+            background: var(--surface-2);
+            color: var(--accent);
+        }
+
+        /* URL panel */
+        .url-panel {
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+
+        .url-panel.visible { display: block; }
+
+        .url-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .url-hint {
+            color: var(--text-dim);
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .upload-zone.hidden { display: none; }
+
         /* Mobile */
         @media (max-width: 600px) {
             .container { padding: 40px 16px; }
@@ -442,6 +510,17 @@
                 <span class="logo-text">Smart Meeting Notes</span>
             </div>
             <p class="tagline">Upload a meeting recording. Get a clean transcript back.</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" id="tab-file" data-mode="file">File Upload</button>
+            <button class="tab" id="tab-url" data-mode="url">URL</button>
+        </div>
+
+        <div class="url-panel" id="url-panel">
+            <input type="url" class="url-input" id="url-input"
+                   placeholder="https://youtube.com/watch?v=... or direct audio/video link">
+            <div class="url-hint">YouTube, Google Drive, or any direct audio/video URL.</div>
         </div>
 
         <div class="upload-zone" id="upload-zone">
@@ -477,7 +556,7 @@
                 <div class="progress-bar-fill" id="progress-bar"></div>
             </div>
             <div class="progress-steps">
-                <div class="step" id="step-upload"><span class="step-dot"></span>Uploading file...</div>
+                <div class="step" id="step-upload"><span class="step-dot"></span>Uploading / downloading...</div>
                 <div class="step" id="step-extract"><span class="step-dot"></span>Extracting audio...</div>
                 <div class="step" id="step-transcribe"><span class="step-dot"></span>Transcribing with AssemblyAI...</div>
                 <div class="step" id="step-done"><span class="step-dot"></span>Done!</div>
@@ -589,63 +668,115 @@
 
         fileRemove.addEventListener('click', clearFile);
 
+        // Tabs
+        const tabFile = document.getElementById('tab-file');
+        const tabUrl = document.getElementById('tab-url');
+        const urlPanel = document.getElementById('url-panel');
+        const urlInput = document.getElementById('url-input');
+        let mode = 'file';
+
+        function setMode(newMode) {
+            mode = newMode;
+            tabFile.classList.toggle('active', mode === 'file');
+            tabUrl.classList.toggle('active', mode === 'url');
+            uploadZone.classList.toggle('hidden', mode !== 'file');
+            fileInfo.classList.toggle('hidden', mode !== 'file');
+            urlPanel.classList.toggle('visible', mode === 'url');
+
+            if (mode === 'url') {
+                fileInfo.classList.remove('visible');
+                transcribeBtn.classList.add('visible');
+            } else {
+                transcribeBtn.classList.toggle('visible', !!selectedFile);
+            }
+            resultSection.classList.remove('visible');
+            errorMsg.classList.remove('visible');
+        }
+
+        tabFile.addEventListener('click', () => setMode('file'));
+        tabUrl.addEventListener('click', () => setMode('url'));
+
+        // Map backend stages to UI steps
+        function applyStage(stage) {
+            const order = ['queued', 'downloading', 'extracting', 'transcribing', 'done'];
+            const idx = order.indexOf(stage);
+            const stepMap = {
+                'queued':       { active: 'step-upload',     pct: 10 },
+                'downloading':  { active: 'step-upload',     pct: 25 },
+                'extracting':   { active: 'step-extract',    pct: 50, done: ['step-upload'] },
+                'transcribing': { active: 'step-transcribe', pct: 75, done: ['step-upload', 'step-extract'] },
+                'done':         { active: null,              pct: 100, done: ['step-upload', 'step-extract', 'step-transcribe', 'step-done'] },
+            };
+            const cfg = stepMap[stage];
+            if (!cfg) return;
+            ['step-upload', 'step-extract', 'step-transcribe', 'step-done'].forEach(s => setStep(s, null));
+            (cfg.done || []).forEach(s => setStep(s, 'done'));
+            if (cfg.active) setStep(cfg.active, 'active');
+            progressBar.style.width = cfg.pct + '%';
+        }
+
+        async function pollTask(taskId) {
+            while (true) {
+                const res = await fetch(`${API_URL}/status/${taskId}`);
+                if (!res.ok) throw new Error('Task lookup failed');
+                const data = await res.json();
+                applyStage(data.stage || 'queued');
+
+                if (data.status === 'done') return data.transcript;
+                if (data.status === 'error') throw new Error(data.error || 'Transcription failed');
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+
         // Transcribe
         transcribeBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
+            if (mode === 'file' && !selectedFile) return;
+            if (mode === 'url' && !urlInput.value.trim()) {
+                showError('Please enter a URL.');
+                return;
+            }
 
             transcribeBtn.disabled = true;
             transcribeBtn.textContent = 'Processing...';
             progressSection.classList.add('visible');
             resultSection.classList.remove('visible');
             errorMsg.classList.remove('visible');
-
-            // Step 1: Upload
-            setStep('step-upload', 'active');
-            progressBar.style.width = '15%';
-
-            const formData = new FormData();
-            formData.append('file', selectedFile);
+            applyStage('queued');
 
             try {
-                // Step 2: Extracting
-                setTimeout(() => {
-                    setStep('step-upload', 'done');
-                    setStep('step-extract', 'active');
-                    progressBar.style.width = '35%';
-                }, 2000);
-
-                // Step 3: Transcribing
-                setTimeout(() => {
-                    setStep('step-extract', 'done');
-                    setStep('step-transcribe', 'active');
-                    progressBar.style.width = '65%';
-                }, 5000);
-
-                const response = await fetch(`${API_URL}/transcribe`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || 'Transcription failed');
+                let startRes;
+                if (mode === 'file') {
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    startRes = await fetch(`${API_URL}/transcribe`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    startRes = await fetch(`${API_URL}/transcribe-url`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: urlInput.value.trim() })
+                    });
                 }
 
-                transcriptText = await response.text();
+                if (!startRes.ok) {
+                    const err = await startRes.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Failed to start task');
+                }
 
-                // Done
-                setStep('step-transcribe', 'done');
-                setStep('step-done', 'done');
-                progressBar.style.width = '100%';
+                const { task_id } = await startRes.json();
+                transcriptText = await pollTask(task_id);
+
+                applyStage('done');
 
                 setTimeout(() => {
                     progressSection.classList.remove('visible');
                     transcriptBox.textContent = transcriptText;
                     resultSection.classList.add('visible');
-                    // Reset steps
                     ['step-upload', 'step-extract', 'step-transcribe', 'step-done'].forEach(s => setStep(s, null));
                     progressBar.style.width = '0%';
-                }, 1000);
+                }, 800);
 
             } catch (err) {
                 progressSection.classList.remove('visible');
