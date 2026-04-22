@@ -1,11 +1,12 @@
 import asyncio
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 import uuid
 from urllib.parse import urlparse
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -199,6 +200,112 @@ async def task_status(task_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+REALTIME_SAMPLE_RATE = 16000
+
+
+@app.websocket("/ws/transcribe-live")
+async def ws_transcribe_live(ws: WebSocket):
+    """Live transcription WS for the Chrome extension.
+
+    Protocol:
+      client -> server: {"type":"start", ...} JSON, then binary WebM/Opus chunks, then {"type":"stop"}
+      server -> client: {"type":"transcript", "text":"..."} messages
+    """
+    await ws.accept()
+    loop = asyncio.get_event_loop()
+    transcriber = None
+    ffmpeg_proc = None
+    reader_task = None
+
+    async def send_transcript(text: str):
+        try:
+            await ws.send_json({"type": "transcript", "text": text})
+        except Exception:
+            pass
+
+    def on_data(t):
+        text = getattr(t, "text", "") or ""
+        if text:
+            asyncio.run_coroutine_threadsafe(send_transcript(text), loop)
+
+    def on_error(err):
+        print(f"AssemblyAI realtime error: {err}")
+
+    async def start_pipeline():
+        nonlocal ffmpeg_proc, transcriber, reader_task
+        # ffmpeg: read continuous WebM/Opus from stdin, emit 16-kHz mono PCM to stdout
+        ffmpeg_proc = subprocess.Popen(
+            [
+                "ffmpeg", "-loglevel", "quiet", "-i", "pipe:0",
+                "-f", "s16le", "-acodec", "pcm_s16le",
+                "-ar", str(REALTIME_SAMPLE_RATE), "-ac", "1", "pipe:1",
+            ],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        transcriber = aai.RealtimeTranscriber(
+            sample_rate=REALTIME_SAMPLE_RATE, on_data=on_data, on_error=on_error
+        )
+        await loop.run_in_executor(None, transcriber.connect)
+
+        async def pump_pcm():
+            while ffmpeg_proc and ffmpeg_proc.stdout:
+                chunk = await loop.run_in_executor(None, ffmpeg_proc.stdout.read, 3200)
+                if not chunk:
+                    break
+                try:
+                    transcriber.stream(chunk)
+                except Exception as e:
+                    print(f"realtime stream error: {e}")
+
+        reader_task = asyncio.create_task(pump_pcm())
+
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+            if msg.get("text") is not None:
+                try:
+                    data = json.loads(msg["text"])
+                except Exception:
+                    continue
+                if data.get("type") == "start" and ffmpeg_proc is None:
+                    await start_pipeline()
+                elif data.get("type") == "stop":
+                    break
+            elif msg.get("bytes") is not None and ffmpeg_proc and ffmpeg_proc.stdin:
+                try:
+                    await loop.run_in_executor(None, ffmpeg_proc.stdin.write, msg["bytes"])
+                except Exception:
+                    break
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"ws_transcribe_live error: {e}")
+    finally:
+        try:
+            if ffmpeg_proc and ffmpeg_proc.stdin:
+                ffmpeg_proc.stdin.close()
+        except Exception:
+            pass
+        if reader_task:
+            reader_task.cancel()
+        try:
+            if transcriber:
+                await loop.run_in_executor(None, transcriber.close)
+        except Exception:
+            pass
+        try:
+            if ffmpeg_proc:
+                ffmpeg_proc.terminate()
+        except Exception:
+            pass
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 @app.get("/health")
