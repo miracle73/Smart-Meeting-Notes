@@ -494,6 +494,98 @@
 
         .upload-zone.hidden { display: none; }
 
+        /* Summarize toggle */
+        .summarize-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+            padding: 14px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .summarize-toggle input { cursor: pointer; accent-color: var(--accent); }
+
+        .summarize-toggle-label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .summarize-toggle-hint {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-left: auto;
+        }
+
+        /* Result tabs */
+        .result-tabs {
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .result-tab {
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .result-tab:hover { color: var(--text); }
+
+        .result-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .result-panel { display: none; }
+        .result-panel.active { display: block; }
+
+        .result-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .result-list li {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 18px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .result-list li .meta {
+            display: block;
+            color: var(--text-dim);
+            font-size: 12px;
+            margin-top: 6px;
+            font-family: 'Space Mono', monospace;
+        }
+
+        .result-empty {
+            color: var(--text-dim);
+            font-size: 13px;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
+
         /* Mobile */
         @media (max-width: 600px) {
             .container { padding: 40px 16px; }
@@ -549,6 +641,12 @@
             <button class="file-remove" id="file-remove">✕</button>
         </div>
 
+        <label class="summarize-toggle" for="summarize-check">
+            <input type="checkbox" id="summarize-check" checked>
+            <span class="summarize-toggle-label">Auto-generate summary & action items</span>
+            <span class="summarize-toggle-hint">LangGraph + OpenRouter</span>
+        </label>
+
         <button class="transcribe-btn" id="transcribe-btn">Transcribe Meeting</button>
 
         <div class="progress-section" id="progress-section">
@@ -559,6 +657,7 @@
                 <div class="step" id="step-upload"><span class="step-dot"></span>Uploading / downloading...</div>
                 <div class="step" id="step-extract"><span class="step-dot"></span>Extracting audio...</div>
                 <div class="step" id="step-transcribe"><span class="step-dot"></span>Transcribing with AssemblyAI...</div>
+                <div class="step" id="step-summarize"><span class="step-dot"></span>Running summarization agents...</div>
                 <div class="step" id="step-done"><span class="step-dot"></span>Done!</div>
             </div>
         </div>
@@ -567,13 +666,36 @@
 
         <div class="result-section" id="result-section">
             <div class="result-header">
-                <div class="result-title">✅ Transcript Ready</div>
+                <div class="result-title">✅ Results Ready</div>
                 <div class="result-actions">
                     <button class="action-btn" id="copy-btn">Copy</button>
                     <button class="action-btn primary" id="download-btn">Download .txt</button>
                 </div>
             </div>
-            <div class="transcript-box" id="transcript-box"></div>
+
+            <div class="result-tabs" id="result-tabs">
+                <button class="result-tab active" data-panel="panel-transcript">Transcript</button>
+                <button class="result-tab" data-panel="panel-summary">Summary</button>
+                <button class="result-tab" data-panel="panel-actions">Action Items</button>
+                <button class="result-tab" data-panel="panel-decisions">Decisions</button>
+                <button class="result-tab" data-panel="panel-next">Next Steps</button>
+            </div>
+
+            <div class="result-panel active" id="panel-transcript">
+                <div class="transcript-box" id="transcript-box"></div>
+            </div>
+            <div class="result-panel" id="panel-summary">
+                <ul class="result-list" id="summary-list"></ul>
+            </div>
+            <div class="result-panel" id="panel-actions">
+                <ul class="result-list" id="actions-list"></ul>
+            </div>
+            <div class="result-panel" id="panel-decisions">
+                <ul class="result-list" id="decisions-list"></ul>
+            </div>
+            <div class="result-panel" id="panel-next">
+                <ul class="result-list" id="next-list"></ul>
+            </div>
         </div>
 
         <div class="footer">
@@ -673,7 +795,10 @@
         const tabUrl = document.getElementById('tab-url');
         const urlPanel = document.getElementById('url-panel');
         const urlInput = document.getElementById('url-input');
+        const summarizeCheck = document.getElementById('summarize-check');
+        const ALL_STEPS = ['step-upload', 'step-extract', 'step-transcribe', 'step-summarize', 'step-done'];
         let mode = 'file';
+        let lastResult = null;
 
         function setMode(newMode) {
             mode = newMode;
@@ -698,18 +823,17 @@
 
         // Map backend stages to UI steps
         function applyStage(stage) {
-            const order = ['queued', 'downloading', 'extracting', 'transcribing', 'done'];
-            const idx = order.indexOf(stage);
             const stepMap = {
                 'queued':       { active: 'step-upload',     pct: 10 },
                 'downloading':  { active: 'step-upload',     pct: 25 },
-                'extracting':   { active: 'step-extract',    pct: 50, done: ['step-upload'] },
-                'transcribing': { active: 'step-transcribe', pct: 75, done: ['step-upload', 'step-extract'] },
-                'done':         { active: null,              pct: 100, done: ['step-upload', 'step-extract', 'step-transcribe', 'step-done'] },
+                'extracting':   { active: 'step-extract',    pct: 45, done: ['step-upload'] },
+                'transcribing': { active: 'step-transcribe', pct: 65, done: ['step-upload', 'step-extract'] },
+                'summarizing':  { active: 'step-summarize',  pct: 85, done: ['step-upload', 'step-extract', 'step-transcribe'] },
+                'done':         { active: null,              pct: 100, done: ALL_STEPS },
             };
             const cfg = stepMap[stage];
             if (!cfg) return;
-            ['step-upload', 'step-extract', 'step-transcribe', 'step-done'].forEach(s => setStep(s, null));
+            ALL_STEPS.forEach(s => setStep(s, null));
             (cfg.done || []).forEach(s => setStep(s, 'done'));
             if (cfg.active) setStep(cfg.active, 'active');
             progressBar.style.width = cfg.pct + '%';
@@ -722,10 +846,57 @@
                 const data = await res.json();
                 applyStage(data.stage || 'queued');
 
-                if (data.status === 'done') return data.transcript;
+                if (data.status === 'done') return data;
                 if (data.status === 'error') throw new Error(data.error || 'Transcription failed');
                 await new Promise(r => setTimeout(r, 2000));
             }
+        }
+
+        // Result tab switching
+        document.querySelectorAll('.result-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.result-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.panel).classList.add('active');
+            });
+        });
+
+        function renderBullets(listEl, items) {
+            listEl.innerHTML = '';
+            if (!items || !items.length) {
+                listEl.innerHTML = '<div class="result-empty">Nothing extracted.</div>';
+                return;
+            }
+            items.forEach(item => {
+                const li = document.createElement('li');
+                if (typeof item === 'string') {
+                    li.textContent = item;
+                } else if (item && typeof item === 'object') {
+                    const main = item.task || item.decision || item.step || JSON.stringify(item);
+                    li.textContent = main;
+                    const metaBits = [];
+                    if (item.owner) metaBits.push('Owner: ' + item.owner);
+                    if (item.deadline) metaBits.push('Due: ' + item.deadline);
+                    if (item.context) metaBits.push(item.context);
+                    if (metaBits.length) {
+                        const meta = document.createElement('span');
+                        meta.className = 'meta';
+                        meta.textContent = metaBits.join(' · ');
+                        li.appendChild(meta);
+                    }
+                }
+                listEl.appendChild(li);
+            });
+        }
+
+        function renderResults(data) {
+            lastResult = data;
+            transcriptBox.textContent = data.transcript || '';
+            renderBullets(document.getElementById('summary-list'), data.summary || []);
+            renderBullets(document.getElementById('actions-list'), data.action_items || []);
+            renderBullets(document.getElementById('decisions-list'), data.decisions || []);
+            renderBullets(document.getElementById('next-list'), data.next_steps || []);
         }
 
         // Transcribe
@@ -744,16 +915,17 @@
             applyStage('queued');
 
             try {
+                const wantSummary = summarizeCheck.checked ? '?summarize=true' : '';
                 let startRes;
                 if (mode === 'file') {
                     const formData = new FormData();
                     formData.append('file', selectedFile);
-                    startRes = await fetch(`${API_URL}/transcribe`, {
+                    startRes = await fetch(`${API_URL}/transcribe${wantSummary}`, {
                         method: 'POST',
                         body: formData
                     });
                 } else {
-                    startRes = await fetch(`${API_URL}/transcribe-url`, {
+                    startRes = await fetch(`${API_URL}/transcribe-url${wantSummary}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ url: urlInput.value.trim() })
@@ -766,21 +938,22 @@
                 }
 
                 const { task_id } = await startRes.json();
-                transcriptText = await pollTask(task_id);
+                const data = await pollTask(task_id);
+                transcriptText = data.transcript || '';
 
                 applyStage('done');
 
                 setTimeout(() => {
                     progressSection.classList.remove('visible');
-                    transcriptBox.textContent = transcriptText;
+                    renderResults(data);
                     resultSection.classList.add('visible');
-                    ['step-upload', 'step-extract', 'step-transcribe', 'step-done'].forEach(s => setStep(s, null));
+                    ALL_STEPS.forEach(s => setStep(s, null));
                     progressBar.style.width = '0%';
                 }, 800);
 
             } catch (err) {
                 progressSection.classList.remove('visible');
-                ['step-upload', 'step-extract', 'step-transcribe', 'step-done'].forEach(s => setStep(s, null));
+                ALL_STEPS.forEach(s => setStep(s, null));
                 progressBar.style.width = '0%';
                 showError(err.message);
             }

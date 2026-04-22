@@ -5,3 +5,5 @@ assemblyai
 python-dotenv
 yt-dlp
 httpx
+langgraph
+openai

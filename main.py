@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import subprocess
@@ -10,6 +11,8 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import assemblyai as aai
 import httpx
+
+from agents.pipeline import summarize_transcript
 
 load_dotenv()
 
@@ -26,6 +29,10 @@ tasks: dict = {}
 
 class UrlRequest(BaseModel):
     url: str
+
+
+class SummarizeRequest(BaseModel):
+    transcript: str
 
 
 def extract_audio_from_video(video_path: str) -> str:
@@ -84,7 +91,8 @@ def download_from_url(url: str, tmp_dir: str) -> str:
     return out_path
 
 
-def run_pipeline(task_id: str, input_path: str, tmp_dir: str, is_video: bool):
+def run_pipeline(task_id: str, input_path: str, tmp_dir: str, is_video: bool,
+                 do_summarize: bool = False):
     try:
         if is_video:
             tasks[task_id]["stage"] = "extracting"
@@ -94,21 +102,30 @@ def run_pipeline(task_id: str, input_path: str, tmp_dir: str, is_video: bool):
 
         tasks[task_id]["stage"] = "transcribing"
         text = transcribe_audio(audio_path)
+        tasks[task_id]["transcript"] = text
 
-        tasks[task_id].update({"status": "done", "stage": "done", "transcript": text})
+        if do_summarize:
+            tasks[task_id]["stage"] = "summarizing"
+            try:
+                result = asyncio.run(summarize_transcript(text))
+                tasks[task_id].update(result)
+            except Exception as e:
+                tasks[task_id]["summary_error"] = str(e)
+
+        tasks[task_id].update({"status": "done", "stage": "done"})
     except Exception as e:
         tasks[task_id].update({"status": "error", "error": str(e)})
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def run_url_pipeline(task_id: str, url: str, tmp_dir: str):
+def run_url_pipeline(task_id: str, url: str, tmp_dir: str, do_summarize: bool = False):
     try:
         tasks[task_id]["stage"] = "downloading"
         local_path = download_from_url(url, tmp_dir)
         ext = os.path.splitext(local_path)[1].lower()
         is_video = ext in VIDEO_EXTENSIONS
-        run_pipeline(task_id, local_path, tmp_dir, is_video)
+        run_pipeline(task_id, local_path, tmp_dir, is_video, do_summarize)
     except Exception as e:
         tasks[task_id].update({"status": "error", "error": str(e)})
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -121,8 +138,11 @@ async def serve_ui():
 
 
 @app.post("/transcribe")
-async def transcribe(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    """Upload audio/video → returns task_id. Poll /status/{task_id}."""
+async def transcribe(background_tasks: BackgroundTasks, file: UploadFile = File(...),
+                     summarize: bool = False):
+    """Upload audio/video → returns task_id. Poll /status/{task_id}.
+    Pass ?summarize=true to auto-run the LangGraph summarization pipeline after transcription.
+    """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
 
@@ -141,22 +161,36 @@ async def transcribe(background_tasks: BackgroundTasks, file: UploadFile = File(
     task_id = str(uuid.uuid4())
     tasks[task_id] = {"status": "processing", "stage": "queued"}
     background_tasks.add_task(
-        run_pipeline, task_id, input_path, tmp_dir, ext in VIDEO_EXTENSIONS
+        run_pipeline, task_id, input_path, tmp_dir, ext in VIDEO_EXTENSIONS, summarize
     )
     return {"task_id": task_id}
 
 
 @app.post("/transcribe-url")
-async def transcribe_url(req: UrlRequest, background_tasks: BackgroundTasks):
-    """Transcribe from a URL (YouTube, Google Drive, direct link) → returns task_id."""
+async def transcribe_url(req: UrlRequest, background_tasks: BackgroundTasks,
+                         summarize: bool = False):
+    """Transcribe from a URL (YouTube, Google Drive, direct link) → returns task_id.
+    Pass ?summarize=true to auto-run the LangGraph summarization pipeline after transcription.
+    """
     if not req.url:
         raise HTTPException(status_code=400, detail="Missing 'url' field")
 
     tmp_dir = tempfile.mkdtemp()
     task_id = str(uuid.uuid4())
     tasks[task_id] = {"status": "processing", "stage": "queued"}
-    background_tasks.add_task(run_url_pipeline, task_id, req.url, tmp_dir)
+    background_tasks.add_task(run_url_pipeline, task_id, req.url, tmp_dir, summarize)
     return {"task_id": task_id}
+
+
+@app.post("/summarize")
+async def summarize_endpoint(req: SummarizeRequest):
+    """Run the multi-agent summarization pipeline on a transcript."""
+    if not req.transcript or not req.transcript.strip():
+        raise HTTPException(status_code=400, detail="Missing transcript text")
+    try:
+        return await summarize_transcript(req.transcript)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Summarization failed: {e}")
 
 
 @app.get("/status/{task_id}")
