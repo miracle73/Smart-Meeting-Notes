@@ -1,0 +1,300 @@
+/* ======================================================================
+   MeetScribe AI — shared styles
+   Used by both the content-script floating badge and the popup UI.
+   ====================================================================== */
+
+:root {
+  --ms-bg: #0a0a0f;
+  --ms-surface: #12121a;
+  --ms-surface-2: #1a1a26;
+  --ms-border: #2a2a3a;
+  --ms-text: #e8e8f0;
+  --ms-text-dim: #8888a0;
+  --ms-accent: #00e5a0;
+  --ms-accent-dim: #00b37d;
+  --ms-danger: #ff4d6a;
+  --ms-radius: 10px;
+}
+
+/* ---------- Content-script floating badge ---------- */
+
+#meetscribe-badge {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 2147483647;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #fff;
+  background: rgba(18, 18, 26, 0.92);
+  border: 1px solid rgba(0, 229, 160, 0.4);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+#meetscribe-badge .ms-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8888a0;
+}
+
+#meetscribe-badge[data-state='recording'] .ms-dot {
+  background: var(--ms-danger);
+  box-shadow: 0 0 8px var(--ms-danger);
+  animation: ms-pulse 1.4s infinite ease-in-out;
+}
+
+#meetscribe-badge[data-state='connecting'] .ms-dot {
+  background: var(--ms-accent);
+  animation: ms-pulse 1.4s infinite ease-in-out;
+}
+
+@keyframes ms-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.35); }
+}
+
+/* ---------- Popup ---------- */
+
+body.ms-popup {
+  width: 360px;
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--ms-bg);
+  color: var(--ms-text);
+  font-size: 13px;
+}
+
+.ms-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-logo {
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.ms-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ms-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ms-status .ms-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ms-text-dim);
+}
+
+.ms-status[data-on='true'] .ms-dot {
+  background: var(--ms-danger);
+  box-shadow: 0 0 8px var(--ms-danger);
+  animation: ms-pulse 1.4s infinite ease-in-out;
+}
+
+.ms-status[data-on='true'] #ms-status-text {
+  color: var(--ms-danger);
+}
+
+.ms-tabs {
+  display: flex;
+  padding: 8px;
+  gap: 4px;
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-tab {
+  flex: 1;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: var(--ms-text-dim);
+  font-weight: 600;
+  font-size: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ms-tab:hover { color: var(--ms-text); background: var(--ms-surface); }
+.ms-tab.active { color: var(--ms-accent); background: var(--ms-surface-2); }
+
+.ms-panel {
+  display: none;
+  padding: 14px 16px;
+  max-height: 440px;
+  overflow-y: auto;
+}
+
+.ms-panel.active { display: block; }
+
+.ms-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ms-text-dim);
+  margin-bottom: 8px;
+}
+
+.ms-live-box {
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius);
+  padding: 12px 14px;
+  min-height: 120px;
+  max-height: 280px;
+  overflow-y: auto;
+  line-height: 1.6;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.ms-empty {
+  color: var(--ms-text-dim);
+  font-style: italic;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.ms-card {
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.ms-card-title {
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ms-card-dur {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--ms-text-dim);
+  font-weight: 500;
+}
+
+.ms-card-url {
+  color: var(--ms-text-dim);
+  font-size: 11px;
+  margin: 4px 0 8px;
+  word-break: break-all;
+}
+
+.ms-sub {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ms-accent);
+  margin: 8px 0 4px;
+}
+
+.ms-card ul {
+  margin: 0 0 8px 18px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ms-card pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: var(--ms-surface-2);
+  border-radius: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ms-card details { margin-top: 8px; }
+.ms-card summary { cursor: pointer; font-size: 12px; color: var(--ms-text-dim); }
+
+/* Settings rows */
+.ms-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-row.ms-col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.ms-row input[type='text'] {
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: 8px;
+  color: var(--ms-text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: 'Space Mono', monospace;
+}
+
+.ms-row input[type='text']:focus {
+  outline: none;
+  border-color: var(--ms-accent);
+}
+
+.ms-row input[type='checkbox'] {
+  accent-color: var(--ms-accent);
+  cursor: pointer;
+}
+
+.ms-btn {
+  width: 100%;
+  padding: 10px 14px;
+  margin-top: 14px;
+  border: none;
+  border-radius: var(--ms-radius);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ms-btn-primary {
+  background: linear-gradient(135deg, var(--ms-accent), var(--ms-accent-dim));
+  color: var(--ms-bg);
+}
+
+.ms-btn-primary:hover { filter: brightness(1.1); }
+
+.ms-btn-stop {
+  background: rgba(255, 77, 106, 0.12);
+  color: var(--ms-danger);
+  border: 1px solid rgba(255, 77, 106, 0.4);
+}
+
+.ms-btn-stop:hover {
+  background: rgba(255, 77, 106, 0.2);
+}

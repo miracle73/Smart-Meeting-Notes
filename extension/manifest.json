@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "MeetScribe AI",
+  "version": "0.1.0",
+  "description": "Auto-capture, transcribe, and summarize Zoom, Google Meet, and Microsoft Teams meetings.",
+  "permissions": [
+    "tabCapture",
+    "activeTab",
+    "storage",
+    "tabs",
+    "offscreen",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.zoom.us/*",
+    "https://meet.google.com/*",
+    "https://teams.microsoft.com/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "MeetScribe AI",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.zoom.us/*",
+        "https://meet.google.com/*",
+        "https://teams.microsoft.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["offscreen.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

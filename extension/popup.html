@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MeetScribe AI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="ms-popup">
+    <header class="ms-header">
+      <div class="ms-logo">🎙 MeetScribe AI</div>
+      <div class="ms-status" id="ms-status" data-on="false">
+        <span class="ms-dot"></span>
+        <span id="ms-status-text">Idle</span>
+      </div>
+    </header>
+
+    <nav class="ms-tabs">
+      <button class="ms-tab active" data-tab="now">Now</button>
+      <button class="ms-tab" data-tab="history">History</button>
+      <button class="ms-tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <section class="ms-panel active" id="panel-now">
+      <div class="ms-label">Live transcript</div>
+      <div class="ms-live-box" id="ms-live-box">No active meeting.</div>
+      <button class="ms-btn ms-btn-stop" id="ms-stop-btn" hidden>Stop recording</button>
+    </section>
+
+    <section class="ms-panel" id="panel-history">
+      <div id="ms-history-list"></div>
+    </section>
+
+    <section class="ms-panel" id="panel-settings">
+      <label class="ms-row">
+        <span>Auto-record meetings</span>
+        <input type="checkbox" id="ms-auto-record" />
+      </label>
+      <label class="ms-row ms-col">
+        <span>Backend URL</span>
+        <input type="text" id="ms-backend-url" placeholder="http://localhost:8000" />
+      </label>
+      <label class="ms-row ms-col">
+        <span>WebSocket URL</span>
+        <input type="text" id="ms-ws-url" placeholder="ws://localhost:8000/ws/transcribe-live" />
+      </label>
+      <button class="ms-btn ms-btn-primary" id="ms-save-btn">Save</button>
+    </section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
