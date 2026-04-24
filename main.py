@@ -134,7 +134,7 @@ def run_url_pipeline(task_id: str, url: str, tmp_dir: str, do_summarize: bool = 
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
-    with open("index.html", "r") as f:
+    with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
 
 
