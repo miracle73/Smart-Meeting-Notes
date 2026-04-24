@@ -46,7 +46,13 @@
     const label = badgeEl.querySelector('.ms-label');
     if (label) {
       label.textContent =
-        state === 'recording' ? 'REC' : state === 'connecting' ? '...' : 'MeetScribe';
+        state === 'recording'
+          ? 'REC'
+          : state === 'detected'
+          ? 'CLICK ICON'
+          : state === 'connecting'
+          ? '...'
+          : 'MeetScribe';
     }
   }
 
@@ -65,7 +71,9 @@
         autoRecord: true,
       });
       if (!autoRecord) return;
-      showBadge('connecting');
+      // Chrome blocks automatic tabCapture — the user must click the icon.
+      // Badge tells them what to do; background just remembers the tab.
+      showBadge('detected');
       chrome.runtime.sendMessage({ type: 'MEETING_STARTED', url: location.href });
     } else if (!should && inMeeting) {
       inMeeting = false;

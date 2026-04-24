@@ -43,15 +43,11 @@ async function closeOffscreen() {
   }
 }
 
-async function startCapture(tabId, url) {
-  const streamId = await new Promise((resolve) =>
-    chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, resolve)
-  );
+async function startCaptureWithStreamId(tabId, url, streamId) {
   if (!streamId) {
     console.error('MeetScribe: no streamId — cannot capture tab audio');
     return;
   }
-
   const settings = await getSettings();
   await ensureOffscreen();
   activeMeetingTabId = tabId;
@@ -114,13 +110,23 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg && msg.target === 'offscreen') return;
 
   if (msg.type === 'MEETING_STARTED') {
-    startCapture(sender.tab.id, msg.url);
+    // Meeting detected — DO NOT auto-capture (Chrome blocks tabCapture
+    // without a direct user gesture on the extension action). Just remember
+    // the tab so the popup can offer a "Start Recording" button.
+    chrome.storage.local.set({
+      detectedMeeting: { tabId: sender.tab.id, url: msg.url },
+    });
   } else if (msg.type === 'MEETING_ENDED') {
+    chrome.storage.local.remove('detectedMeeting');
     stopCapture();
   } else if (msg.type === 'MEETING_FINISHED') {
     handleMeetingFinished(msg.payload);
   } else if (msg.type === 'MANUAL_STOP') {
     stopCapture();
+  } else if (msg.type === 'START_CAPTURE_FROM_POPUP') {
+    // Popup has already called chrome.tabCapture.getMediaStreamId in the
+    // user-gesture context, so streamId is valid here.
+    startCaptureWithStreamId(msg.tabId, msg.url, msg.streamId);
   }
 });
 

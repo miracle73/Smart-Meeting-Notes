@@ -6,16 +6,46 @@ function escape(s) {
   return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
 
+const MEETING_URL_RE =
+  /^https:\/\/(.*\.)?(zoom\.us|meet\.google\.com|teams\.microsoft\.com)\//;
+
+async function getActiveMeetingTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab && tab.url && MEETING_URL_RE.test(tab.url)) return tab;
+  return null;
+}
+
 async function refreshStatus() {
   const { recording = false } = await chrome.storage.local.get('recording');
   $('ms-status').dataset.on = String(recording);
   $('ms-status-text').textContent = recording ? 'Recording' : 'Idle';
   $('ms-stop-btn').hidden = !recording;
-  if (!recording) {
-    const box = $('ms-live-box');
-    if (!box.textContent.trim() || box.textContent === 'No active meeting.') {
-      box.textContent = 'No active meeting.';
-    }
+
+  const box = $('ms-live-box');
+  const label = $('ms-now-label');
+  const startBtn = $('ms-start-btn');
+
+  if (recording) {
+    startBtn.hidden = true;
+    label.textContent = 'Live transcript';
+    if (box.textContent === 'No active meeting.') box.textContent = '';
+    return;
+  }
+
+  // Not recording — check if we're on a meeting tab
+  const meetingTab = await getActiveMeetingTab();
+  if (meetingTab) {
+    startBtn.hidden = false;
+    startBtn.dataset.tabId = meetingTab.id;
+    startBtn.dataset.url = meetingTab.url;
+    label.textContent = 'Meeting detected';
+    box.textContent =
+      'Click "Start recording" to begin capturing this meeting. ' +
+      '(Chrome requires a click on this button — auto-start is blocked.)';
+  } else {
+    startBtn.hidden = true;
+    label.textContent = 'Live transcript';
+    box.textContent = 'No active meeting.';
   }
 }
 
@@ -76,6 +106,34 @@ $('ms-save-btn').addEventListener('click', async () => {
 
 $('ms-stop-btn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'MANUAL_STOP' });
+});
+
+$('ms-start-btn').addEventListener('click', async () => {
+  const btn = $('ms-start-btn');
+  const tabId = Number(btn.dataset.tabId);
+  const url = btn.dataset.url;
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  // IMPORTANT: this call MUST happen here in the popup (user gesture + activeTab)
+  // so Chrome issues a valid streamId. The service worker can't do this alone.
+  chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (streamId) => {
+    if (chrome.runtime.lastError || !streamId) {
+      btn.disabled = false;
+      btn.textContent = 'Start recording';
+      $('ms-live-box').textContent =
+        'Error: ' + (chrome.runtime.lastError?.message || 'no streamId');
+      return;
+    }
+    chrome.runtime.sendMessage({
+      type: 'START_CAPTURE_FROM_POPUP',
+      streamId,
+      tabId,
+      url,
+    });
+    // Close popup so the user sees the badge on the Meet tab
+    window.close();
+  });
 });
 
 document.querySelectorAll('.ms-tab').forEach((btn) => {

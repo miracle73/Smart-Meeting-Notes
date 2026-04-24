@@ -58,6 +58,15 @@
   animation: ms-pulse 1.4s infinite ease-in-out;
 }
 
+#meetscribe-badge[data-state='detected'] {
+  border-color: rgba(0, 229, 160, 0.6);
+}
+
+#meetscribe-badge[data-state='detected'] .ms-dot {
+  background: var(--ms-accent);
+  box-shadow: 0 0 8px var(--ms-accent);
+}
+
 @keyframes ms-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.55; transform: scale(1.35); }
