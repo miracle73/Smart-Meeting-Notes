@@ -1,8 +1,6 @@
 # Smart Meeting Notes — production image.
-# Bakes ffmpeg in (used by the URL pipeline + live WS), installs Python deps,
-# runs uvicorn on $PORT (defaults to 8000) so platforms like Render / Fly /
-# Hugging Face Spaces work without modification.
-FROM python:3.12-slim AS base
+# Base from AWS Public ECR (no Docker Hub rate limit).
+FROM public.ecr.aws/docker/library/python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

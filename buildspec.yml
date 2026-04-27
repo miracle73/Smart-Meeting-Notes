@@ -1,0 +1,12 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REG
+  build:
+    commands:
+      - docker build -t $IMG_NAME:latest .
+      - docker tag $IMG_NAME:latest $ECR_REG/$IMG_NAME:latest
+  post_build:
+    commands:
+      - docker push $ECR_REG/$IMG_NAME:latest

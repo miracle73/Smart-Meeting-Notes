@@ -85,8 +85,8 @@ async function loadHistory() {
 async function loadSettings() {
   const s = await chrome.storage.local.get({
     autoRecord: true,
-    backendUrl: 'http://localhost:8000',
-    wsUrl: 'ws://localhost:8000/ws/transcribe-live',
+    backendUrl: 'https://bdxe6giq3t.us-east-1.awsapprunner.com',
+    wsUrl: 'wss://bdxe6giq3t.us-east-1.awsapprunner.com/ws/transcribe-live',
   });
   $('ms-auto-record').checked = s.autoRecord;
   $('ms-backend-url').value = s.backendUrl;
