@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.git
+.pytest_cache
+tests/.pytest_cache
+.env
+*.wav
+*.mp3
+*.mp4
+extension/node_modules
+.idea
+.vscode

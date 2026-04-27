@@ -7,3 +7,12 @@ yt-dlp
 httpx
 langgraph
 openai
+websockets
+pydantic
+tenacity
+structlog
+prometheus-client
+# dev / eval
+pytest
+pytest-asyncio
+jiwer

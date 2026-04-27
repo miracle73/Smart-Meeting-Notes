@@ -1,0 +1,34 @@
+{
+  "transcripts": [
+    {
+      "id": "standup_001",
+      "transcript": "Alice: Sprint 14 retro. We hit 60% test coverage, target was 70. Bob: I'll add the missing integration tests by Friday. Carol: We decided to upgrade to Postgres 16 next sprint. Alice: Action — Bob owns the test backfill, Carol owns the Postgres migration plan.",
+      "expected": {
+        "summary_keywords": ["coverage", "60%", "Postgres"],
+        "expected_action_items_min": 2,
+        "expected_decisions_min": 1,
+        "expected_owners": ["Bob", "Carol"]
+      }
+    },
+    {
+      "id": "design_review_002",
+      "transcript": "Dan: For the rate limiter, I propose token bucket. Eve: Agreed, leaky bucket gave us tail-latency issues last quarter. Dan: Decision — token bucket, 1000 rps per tenant. Eve: I'll write the RFC by next Monday and circulate it.",
+      "expected": {
+        "summary_keywords": ["rate limiter", "token bucket"],
+        "expected_action_items_min": 1,
+        "expected_decisions_min": 1,
+        "expected_owners": ["Eve"]
+      }
+    },
+    {
+      "id": "no_actions_003",
+      "transcript": "Frank: Quick FYI — the deploy went out clean. No issues. Grace: Cool, thanks for the heads up. End of meeting.",
+      "expected": {
+        "summary_keywords": ["deploy"],
+        "expected_action_items_min": 0,
+        "expected_decisions_min": 0,
+        "expected_owners": []
+      }
+    }
+  ]
+}
